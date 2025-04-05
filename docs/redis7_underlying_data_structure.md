@@ -377,3 +377,13 @@ dict.c 的63行：
 &#x9;listpack在源码中的体现如下（`listpack.h` 49行）：
 
 ![](assets/redis7_underlying_data_structure/18.png)
+
+## 3、hash底层数据结构总结
+
+&#x9;最后，对于hash类型的底层数据结构，做一个总结：
+
+1、hash底层更多的是使用listpack来存储value。
+
+2、如果hash对象保存的键值对超过512个，或者所有键值对的字符串长度超过64字节，底层的数据结构就会由listpack升级成为hashtable。
+
+3、对于同一个hash数据，listpack结构可以升级为hashtable结构，但是hashtable结构不会降级成为listpack。
