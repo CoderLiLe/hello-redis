@@ -744,3 +744,51 @@ fd3cbd892f11e950104955f7297adb20fab0253c 192.168.65.214:6381@16381 myself,master
 > 注：集群故障转移也可以通过手动形式触发。例如在一个slave节点上执行cluster failover，就会触发一次故障转移，尝试将这个slave提升为master。
 
 &#x9;从节点信息可以看到，集群中在每个master的最后，都记录了他负责的slot槽位，这些slot就是Redis集群工作的核心。
+
+## 3、详解Slot槽位
+
+&#x9;Redis集群设置16384个哈希槽。每个key会通过CRC16校验后，对16384取模，来决定放到哪个槽。集群的每个节点负责一部分的hash槽。
+
+&#x9;![](assets/data_security_analysis/09.png)
+
+**问题1、Slot如何分配**
+
+&#x9;Redis集群中内置16384个槽位。在建立集群时，Redis会根据集群节点数量，将这些槽位尽量平均的分配到各个节点上。并且，如果集群中的节点数量发生了变化。(增加了节点或者减少了节点)。就需要触发一次reshard，重新分配槽位。而槽位中对应的key，也会随着进行数据迁移。
+
+```shell
+# 增加6387,6388两个Redis服务，并启动
+
+# 添加到集群当中
+redis-cli -a 123qweasd -p 6381 --cluster add-node 192.168.65.214:6387 192.168.65.214:6388
+# 确定集群状态  此时新节点上是没有slot分配的
+redis-cli -a 123qweasd -p 6381 --cluster check 192.168.65.214:6381
+# 手动触发reshard，重新分配槽位
+redis-cli -a 123qweasd -p 6381 reshard 192.168.65.214:6381
+# 再次确定集群状态  此时新节点上会有一部分槽位分配
+redis-cli -a 123qweasd -p 6381 --cluster check 192.168.65.214:6381
+```
+
+&#x9;reshard操作会从三个旧节点当中分配一部分新的槽位给新的节点。在这个过程中，Redis也就并不需要移动所有的数据，只需要移动那一部分槽位对应的数据。
+
+&#x9;除了这种自动调整槽位的机制，Redis也提供了手动调整槽位的指令。可以使用cluster help查看相关调整指令。
+
+> 这些指令通常用得比较少，大家自行了解。
+
+&#x9;另外，Redis集群也会检查每个槽位是否有对应的节点负责。如果负责一部分槽位的一组复制节点都挂了，默认情况下Redis集群就会停止服务。其他正常的节点也无法接收写数据的请求。
+
+&#x9;如果此时，需要强制让Redis集群提供服务，可以在配置文件中，将cluster-require-full-coverage参数手动调整为no。
+
+    # By default Redis Cluster nodes stop accepting queries if they detect there
+    # is at least a hash slot uncovered (no available node is serving it).
+    # This way if the cluster is partially down (for example a range of hash slots
+    # are no longer covered) all the cluster becomes, eventually, unavailable.
+    # It automatically returns available as soon as all the slots are covered again.
+    #
+    # However sometimes you want the subset of the cluster which is working,
+    # to continue to accept queries for the part of the key space that is still
+    # covered. In order to do so, just set the cluster-require-full-coverage
+    # option to no.
+    #
+    # cluster-require-full-coverage yes
+
+> 通常不建议这样做，因为这意味着Redis提供的数据服务是不完整的。
