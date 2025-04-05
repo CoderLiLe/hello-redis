@@ -107,3 +107,114 @@ JSON.DEL user $.address
 *   Redis JSON存储数据的性能更高。Redis JSON底层其实是以一种高效的二进制的格式存储。相比简单的文本格式，二进制格式进行JOSN格式读写的性能更高，也更节省内存。根据官网的性能测试报告，使用Redis JSON读写JSON数据，性能已经能够媲美MongoDB以及ElasticSearch等传统NoSQL数据库。
 *   Redis JSON使用树状结构来存储JSON。这种存储方式可以快速访问子元素。与传统的文本存储方案相比，树状存储结构能够更高效的执行查询操作。
 *   与Redis生态集成度高。作为Redis的扩展模块，Redis JSON和Redis的其他功能和工具无缝集成。这意味着开发者可以继续使用TTL、Redis事务、发布/订阅、Lua脚本等功能。
+
+
+## 3、Search And Query
+
+&#x9;当Redis中存储的数据比较多时，搜索Redis中的数据是一件比较麻烦的事情。通常使用的 keys \* 这样的指令，在生产环境一般都是直接禁用的，因为这样会产生严重的线程阻塞，影响其他的读写操作。
+
+&#x9;如何快速搜索Redis中的数据(主要是key)呢？ Redis中原生提供了Scan指令，另外在Redis  Stack中也增加了Search And Query模块。
+
+### 1、传统Scan搜索
+
+&#x9;Scan指令的官方介绍：<https://redis.io/docs/latest/commands/scan/>
+
+&#x9;Scan指令的基础思想就是每次只返回想要查询的一部分结果数据，然后通过迭代的方式，逐步返回完整数据。
+
+&#x9;scan指令的基础使用方式：&#x20;
+
+```shell
+SCAN cursor [MATCH pattern] [COUNT count] [TYPE type]
+```
+
+&#x9;这几个核心参数介绍如下：
+
+*   cursor: 游标。代表每次迭代返回的偏移量。通常一次查询，cursor从0开始，然后scan指令会返回下一次迭代的起始偏移量。用户可以用这个返回值作为cursor，继续迭代下一批。直到cursor返回0，表示所有数据都过滤完成了。
+*   pattern：匹配字符串。用来匹配要查询的key。 例如 user\* 表示以user开头的字符串。
+*   count：数字，表示每次迭代多少条数据。
+*   type是key的类型，比如可以指定string ,set,zset等。
+
+> 另外，针对不同key类型，还有一些不同的指令。 比如 SSCAN针对Set类型。HSCAN针对HASH类型。 ZSCAN针对ZSet类型。
+
+简单示例如下：
+
+```shell
+-- 准备数据
+eval 'for i = 1,30,1 do redis.call("SET","k"..tostring(i),"v"..tostring(i)) end' 0
+
+--简单按照cursor过滤所有key。
+scan 0
+1) 18      ## 下一次迭代的cursor
+....
+scan 18
+1) 21
+....
+scan 21
+1) 0       ## 返回0表述所有数据过滤完成
+....
+
+
+-- 按照patern过滤 查询所有k开头的key
+scan 0 MATCH k*
+1) 18
+...
+scan 18 MATCH k*
+1) 21
+...
+scan 21 MATCH k* 
+1) 0
+
+-- 设置迭代次数
+scan 0 MATCH k* count 20
+1) 21
+...
+scan 21 MATCH k* count 20
+1) 0
+```
+
+### 2、Search And Query搜索
+
+&#x9;传统的SCAN搜索方式，只能简单的过滤Key。如果想要做一些复杂的搜索，就力不从心了。
+
+&#x9;比如在电商场景中，我们通常会用Redis来缓存商品信息，但是如果要做按品牌、型号、价格等等各种条件过滤商品的场景，Redis就不够用了。以往我们会选择将商品数据导入到MongoDB或者ElasticSearch这样的搜索引擎进行复杂过滤。
+
+![](assets/redis_stack/05.png)
+
+&#x9;而Redis提供了RedisSearch插件，基本就可以认为是ElasticSearch这类搜索引擎的平替。大部分ES能够实现的搜索功能，在Redis里就能直接进行。这样就极大的减少了数据迁移带来的麻烦。
+
+&#x9;既然要做搜索，那就需要有能够支持搜索的数据结构。 Redis的哪些数据结构能够支持结构化查询呢？只有HASH和JSON。
+
+```shell
+--清空数据
+flushall
+-- 创建一个产品的索引
+FT.CREATE productIndex ON JSON SCHEMA $.name AS name TEXT $.price AS price NUMERIC
+## 索引为productIndex. 
+## ON JSON 表示 这个索引会基于JSON数据构建，需要RedisJSON模块的支持。默认是ON HASH 表示检索所有HASH格式的数据
+## SCHEMA表示根据哪些字段建立索引。  字段名 AS 索引字段名 数据类型  这样的组合。如果是JSON格式，字段名用$. 路径表示
+
+-- 模拟一批产品信息
+JSON.SET phone:1 $ '{"id":1,"name":"HUAWEI 1","description":"HUAWEI PHONE 1","price":1999}'
+JSON.SET phone:2 $ '{"id":2,"name":"HUAWEI 2","description":"HUAWEI PHONE 2","price":2999}'
+JSON.SET phone:3 $ '{"id":3,"name":"HUAWEI 3","description":"HUAWEI PHONE 3","price":3999}'
+JSON.SET phone:4 $ '{"id":4,"name":"HUAWEI 4","description":"HUAWEI PHONE 4","price":4999}'
+JSON.SET phone:5 $ '{"id":5,"name":"HUAWEI 5","description":"HUAWEI PHONE 5","price":5999}'
+JSON.SET phone:6 $ '{"id":6,"name":"HUAWEI 6","description":"HUAWEI PHONE 6","price":6999}'
+JSON.SET phone:7 $ '{"id":7,"name":"HUAWEI 7","description":"HUAWEI PHONE 7","price":7999}'
+JSON.SET phone:8 $ '{"id":8,"name":"HUAWEI 8","description":"HUAWEI PHONE 8","price":8999}'
+JSON.SET phone:9 $ '{"id":9,"name":"HUAWEI 9","description":"HUAWEI PHONE 9","price":9999}'
+JSON.SET phone:10 $ '{"id":10,"name":"HUAWEI 10","description":"HUAWEI PHONE 10","price":19999}'
+
+## 如果是ON HASH ，可以直接通过索引添加数据
+## FT.ADD productIndex 'product:1'  1.0 FIELDS "id" 1 "name" "HUAWEI1" "description" "HUAWEI PHONE 1" "PRICE" 3999
+## 数据的key 是producr:1 
+## FIELDS 数据。 按照 key value 的格式组织 
+
+-- 查看索引状态
+FT.INFO productIndex
+
+-- 搜索产品 
+## 搜索条件: name包含 HUAWEI， price在1000到5000之间。返回id和name
+FT.SEARCH productIndex "@name:HUAWEI @price:[1000 5000]" RETURN 2 id name
+## 查询条件构建，参见官网 https://redis.io/docs/latest/develop/interact/search-and-query/query/
+```
