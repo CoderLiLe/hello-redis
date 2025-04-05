@@ -378,3 +378,89 @@ loadmodule /root/myredis/redisbloom.so
 > 27425:M 18 Jun 2024 14:07:29.670 # Module /root/myredis/redisbloom.so failed to load: It does not have execute permissions.
 > 27425:M 18 Jun 2024 14:07:29.670 # Can't load module from /root/myredis/redisbloom.so: server aborting
 > ```
+
+
+## 2、Java客户端调用扩展模块
+
+&#x9;这些扩展模块目前阶段都还是比较新的功能，需要手动进行扩展。所以目前Java的一些客户端工具都还没有集成这些功能。大部分情况下，只能通过lua脚本手动调用这些扩展功能。但是由于在客户端无法确定服务端是否安装了对应的扩展模块，所以，在写lua脚本调用时，一定要注意处理好各种各样的异常情况。
+
+&#x9;例如，以布隆过滤器为例
+
+```java
+@SpringBootTest
+@RunWith(SpringRunner.class)
+public class RedisStackTest {
+
+    @Resource
+    RedisTemplate<String,Object> redisTemplate;
+
+    List<String> keys = List.of("a-bf");
+    @Test
+    public void createBloomFilter(){
+        if(!redisTemplate.hasKey("a-bf")){
+            try{
+                String createFilterScriptText= """
+                     return redis.call('BF.RESERVE', KEYS[1], '0.01','1000','NONSCALING')
+                """;
+                DefaultRedisScript<String> redisScript = new DefaultRedisScript<>(createFilterScriptText, String.class);
+                String execute = redisTemplate.execute(redisScript,keys);
+                System.out.println("CREATE BF:"+execute);
+            }catch (Exception e){
+ //               e.printStackTrace();
+                System.out.println("COMMAND NOT SUPPORT");
+            }
+        }else{
+            System.out.println("BF KEY is already exists");
+        }
+    }
+
+    @Test
+    public void addData(){
+        if(!redisTemplate.hasKey("a-bf")){
+            System.out.println("BF KEY is not exists");
+        }else{
+            try{
+                String[] args = new String[]{"A","B","C","D","E","F","G"};
+                String addDataScriptText= """
+                for i,arg in ipairs(ARGV) do
+                    local addRes = redis.call('BF.ADD',KEYS[1],arg)
+                end
+                return 'OK'
+                """;
+                DefaultRedisScript<String> redisScript = new DefaultRedisScript<>(addDataScriptText, String.class);
+                System.out.println("ADDDATA BF:"+redisTemplate.execute(redisScript,  keys, args));
+            }catch (Exception e){
+//                e.printStackTrace();
+                System.out.println("COMMAND NOT SUPPORTED");
+            }
+        }
+    }
+
+    @Test
+    public void checkData(){
+        if(!redisTemplate.hasKey("a-bf")){
+            System.out.println("BF KEY is not exists");
+        }else{
+            String[] args = new String[]{"A","B","C","D","E","F","G"};
+            String checkDataScriptText= """
+                    local checkRes = redis.call('BF.EXISTS',KEYS[1],ARGV[1])
+                    return checkRes
+                    """;
+            DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>(checkDataScriptText, Long.class);
+            try{
+                Long res = redisTemplate.execute(redisScript, keys, args);
+                if(1L == res){
+                    System.out.println("KEY EXISTS");
+                } else if (0L==res) {
+                    System.out.println("KEY NOT EXISTS");
+                }else{
+                    System.out.println("ERROR");
+                }
+            }catch (Exception e){
+//                e.printStackTrace();
+                System.out.println("COMMAND NOT SUPPORTED");
+            }
+        }
+    }
+}
+```
