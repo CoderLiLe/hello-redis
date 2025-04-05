@@ -641,3 +641,41 @@ OK
 zset-max-listpack-entries 128
 zset-max-listpack-value 64
 ```
+
+## 6.2 zset底层数据结构详解
+
+&#x9;首先，zset类型底层数据结构有skiplist和listpack两种。listpack结构之前已经介绍过。这个skiplist是一种什么样的数据结构呢？
+
+&#x9;zset类型的数据，底层需要先按照score进行排序。排序过程中是需要移动内存的。如果节点数据不是太多，将这些内存移动完后，重新整理成一个类似数据Array的listpack结果是可以接受的。但是如果数据量太大(节点数和数据大小)，那么频繁移动内存，开销就比较大了。这时，显然以链表这种零散的数据结构是比较合适的。
+
+&#x9;但是，对于一个单链表结构来说，要检索链表中的某一个数据，只能从头到尾遍历链表。时间复杂度是O(N)，性能是比较低的。
+
+
+![](assets/redis7_underlying_data_structure/32.png)
+
+&#x9;如何对链表结构进行优化呢？skiplist跳表就是一种思路。skiplist的优化思路是构建多层逐级缩减的子索引，用更多的索引来提升搜索的性能。
+
+
+![](assets/redis7_underlying_data_structure/33.png)
+
+&#x9;skiplist是一种典型的用空间换时间的解决方案，优点是数据检索的性能比较高。时间复杂度是O(logN)，空间复杂度是O(N)。但是他的缺点也很明显，就是更新链表时，维护索引的成本相对更高。因此，skiplist适合那些数据量比较大，且是读多写少的应用场景。
+
+&#x9;Redis天生就是针对读多写少的应用场景，而数据量的大小通过之前看到的两个参数，从数据条目数和数据大小两个方面来进行区别。
+
+&#x9;然后，Redis底层是如何转换数据结构的呢？
+
+&#x9;还是从zset最为常见的zadd操作入手
+
+`t_zset.c` 1838行
+
+
+![](assets/redis7_underlying_data_structure/34.png)
+
+&#x9;往下跟踪这个zaddGenericCommand方法，可以看到下面这个方法：
+
+`t_zset.c` 1169行
+
+
+![](assets/redis7_underlying_data_structure/35.png)
+
+> createZsetObject方法在object.c当中。这个方法里可以看到对象结构被定义为SKIPLIST
