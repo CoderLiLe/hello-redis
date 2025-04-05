@@ -603,3 +603,41 @@ set-max-listpack-value 64
 `t_set.c` 59行
 
 ![](assets/redis7_underlying_data_structure/31.png)
+
+# 6. ZSET类型数据结构详解
+
+## 6.1 zset数据是如何存储的
+
+&#x9;Redis底层综合使用listpack + skiplist两种结构来保存zset类型的数据。
+
+```shell
+127.0.0.1:6379> config get zset*
+1) "zset-max-ziplist-value"
+2) "64"
+3) "zset-max-listpack-entries"
+4) "128"
+5) "zset-max-ziplist-entries"
+6) "128"
+7) "zset-max-listpack-value"
+8) "64"
+127.0.0.1:6379> zadd z1 80 a
+(integer) 1
+127.0.0.1:6379> OBJECT ENCODING z1
+"listpack"
+127.0.0.1:6379> config set zset-max-listpack-entries 3
+OK
+127.0.0.1:6379> zadd z2 80 a 90 b 91 c 95 d
+(integer) 4
+127.0.0.1:6379> OBJECT ENCODING z2
+"skiplist"
+```
+
+&#x9;区分底层数据结构的参数有两个：
+
+```conf
+# Similarly to hashes and lists, sorted sets are also specially encoded in
+# order to save a lot of space. This encoding is only used when the length and
+# elements of a sorted set are below the following limits:
+zset-max-listpack-entries 128
+zset-max-listpack-value 64
+```
