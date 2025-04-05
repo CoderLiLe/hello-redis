@@ -751,7 +751,7 @@ fd3cbd892f11e950104955f7297adb20fab0253c 192.168.65.214:6381@16381 myself,master
 
 &#x9;![](assets/data_security_analysis/09.png)
 
-**问题1、Slot如何分配**
+### 问题1、Slot如何分配
 
 &#x9;Redis集群中内置16384个槽位。在建立集群时，Redis会根据集群节点数量，将这些槽位尽量平均的分配到各个节点上。并且，如果集群中的节点数量发生了变化。(增加了节点或者减少了节点)。就需要触发一次reshard，重新分配槽位。而槽位中对应的key，也会随着进行数据迁移。
 
@@ -792,3 +792,42 @@ redis-cli -a 123qweasd -p 6381 --cluster check 192.168.65.214:6381
     # cluster-require-full-coverage yes
 
 > 通常不建议这样做，因为这意味着Redis提供的数据服务是不完整的。
+
+### 问题2、如何确定key与slot的对应关系？
+
+&#x9;Redis集群中，对于每一个要写入的key，都会寻找所属的槽位。计算的方式是 CRC16(key) mod 16384。
+
+&#x9;首先，这意味着在集群当中，那些批量操作的复合指令(如mset,mhset)支持会不太好。如果他们分属不同的槽位，就无法保证他们能够在一个服务上进行原子性操作。
+
+```shell
+127.0.0.1:6381> mset k1 v1 k2 v2 k3 v3
+(error) CROSSSLOT Keys in request don't hash to the same slot
+```
+
+> 这也是对分布式事务的一种思考。如果这种批量指令需要分到不同的Redis节点上操作，那么这个指令的操作原子性问题就称为了一个分布式事务问题。而分布式事务是一件非常复杂的事情，不要简单的认为用上seata这样的框架就很容易解决。在大部分业务场景下，直接拒绝分布式事务，是一种很好的策略。
+
+&#x9;然后，在Redis中，提供了指令 CLUSTER KEYSLOT 来计算某一个key属于哪个Slot
+
+```shell
+127.0.0.1:6381> CLUSTER KEYSLOT k1
+(integer) 12706
+```
+
+&#x9;另外，Redis在计算hash槽时，会使用hashtag。如果key中有大括号{}，那么只会根据大括号中的hash tag来计算槽位。
+
+```shell
+127.0.0.1:6381> CLUSTER KEYSLOT k1
+(integer) 12706
+127.0.0.1:6381> CLUSTER KEYSLOT roy{k1}
+(integer) 12706
+127.0.0.1:6381> CLUSTER KEYSLOT roy:k1
+(integer) 12349
+-- 使用相同的hash tag，能保证这些数据都是保存在同一个节点上的。
+127.0.0.1:6381>  mset user_{1}_name roy user_{1}_id 1 user_{1}_password 123
+-> Redirected to slot [9842] located at 192.168.65.214:6382
+OK
+```
+
+&#x9;在大型Redis集群中，经常会出现数据倾斜的问题。也就是大量的数据被集中存储到了集群中某一个热点Redis节点上。从而造成这一个节点的负载明显大于其他节点。这种数据倾斜问题就容易造成集群的资源浪费。
+
+&#x9;调整数据倾斜的问题，常见的思路就是分两步。第一步，调整key的结构，尤其是那些访问频繁的热点key，让数据能够尽量平均的分配到各个slot上。第二步，调整slot的分布，将那些数据量多，访问频繁的热点slot进行重新调配，让他们尽量平均的分配到不同的Redis节点上。
