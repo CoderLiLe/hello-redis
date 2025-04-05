@@ -533,3 +533,47 @@ list-max-listpack-size -2
 
 &#x9;至于这其中数据量大小的判断标准，由参数**list-max-listpack-size**决定。这个参数设置成正数，就是按照list结构的数据节点个数判断。负数从-1到-5，就是按照数据节点的大小判断。
 
+
+# 5. SET类型数据结构详解
+
+## 5.1 set数据是如何存储的
+
+&#x9;Redis底层综合使用intset+listpack+hashtable存储set数据。set数据的子元素也是`<k, v>`形式的entry。其中，key就是元素的值，value是null。
+
+```shell
+127.0.0.1:6379> sadd s1 1 2 3 4 5
+(integer) 5
+127.0.0.1:6379> OBJECT ENCODING s1
+"intset"
+127.0.0.1:6379> sadd s2 a b c d e
+(integer) 5
+127.0.0.1:6379> OBJECT ENCODING s2
+"listpack"
+127.0.0.1:6379> config set set-max-listpack-entries 2
+OK
+127.0.0.1:6379> sadd s3 a b c d e
+(integer) 5
+127.0.0.1:6379> OBJECT ENCODING s3
+"hashtable"
+```
+
+&#x9;区分底层结构的相关参数有以下几个：
+
+```conf
+# Sets have a special encoding when a set is composed
+# of just strings that happen to be integers in radix 10 in the range
+# of 64 bit signed integers.
+# The following configuration setting sets the limit in the size of the
+# set in order to use this special memory saving encoding.
+# -- 如果set的数据都是不超过64位的数字(一个long数字).就使用intset存储
+set-max-intset-entries 512
+
+# Sets containing non-integer values are also encoded using a memory efficient
+# data structure when they have a small number of entries, and the biggest entry
+# does not exceed a given threshold. These thresholds can be configured using
+# the following directives.
+# -- 如果set的数据不是数字，并且数据的大小没有超过下面设定的阈值，就用listpack存储
+# -- 如果数据大小超过了其中一个阈值，就改为使用hashtable存储。
+set-max-listpack-entries 128
+set-max-listpack-value 64
+```
