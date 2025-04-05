@@ -488,3 +488,42 @@ list-max-listpack-size -2
 > # etc.
 > list-compress-depth 0
 > ```
+
+## 4.3 quicklist简介
+
+&#x9;要理解quicklist是什么，首先要尝试去理解Redis为什么有了listpack后，还需要设计一个quicklist。也就是listpack结构有什么不足的地方。
+
+&#x9;之前已经给大家介绍过listpack的数据结构。整体来看，listpack可以看成是一个数组(Array)结构。而对于数据结构，他的好处是存储数据是连续的，所以，对数组中的数据进行检索是比较快的，通过偏移量就可以快速定位。listpack的这种结构非常适合支持Redis的list数据类型的LRANGE这样的检索操作。
+
+&#x9;但是，对于数组来说，他的数据节点修改就会比较麻烦。	每次新增或者删除一个节点，都需要调整大量节点的位置。这又使得listpack的数据结构对于Redis的list数据类型的LPUSH这样增加节点的操作非常不友好。尤其当list中的数据节点越多，LPUSH这样的操作要移动的内存也就会越多。
+
+
+![](assets/redis7_underlying_data_structure/23.png)
+
+&#x9;与数组形成对比的是链表(List)结构。链表的节点之间只通过指针指向相关联的节点，这些节点并不需要占用连续的内存。链表的方式，好处就是对链表的增删节点会非常方便，只需要调整指针就可以了。所以链表能够非常好的支持list数据类型的LPUSH，LPOP这样的操作。
+
+&#x9;但是，链表结构也有明显的不足，那就是对数据的检索比较麻烦，只能沿着指针引用关系依次遍历节点。所以纯粹的链表结构也不太适合Redis的list数据类型。
+
+![](assets/redis7_underlying_data_structure/24.png)
+
+&#x9;那么有没有一种数据结构，能够尽量综合数据Array和链表List的优点呢？这就是Redis设计出来的quicklist结构。
+
+&#x9;quicklist大体上可以认为是一个链表结构。里面的每个节点是一个quicklistNode。
+
+`quick.h` 98行:
+
+![](assets/redis7_underlying_data_structure/25.png)
+
+&#x9;每个quicklistNode会保存前后节点的指针，这就是一个典型的链表结构。\
+`quick.h` 36行:
+
+![](assets/redis7_underlying_data_structure/26.png)
+
+&#x9;在quicklistNode中，\*entry实际上就是指向具体保存数据的listpack结构。
+
+![](assets/redis7_underlying_data_structure/27.png)
+
+&#x9;这样就形成了quicklist的整体结构。这个quicklist结构，就相当于是数组Array和链表List的结合体。这就能尽可能的结合这两种数据结构的优点。
+
+> quicklist的整体结构其实在Redis很早的版本中就已经成型了。区别在于quicklistNode中间保存的数据结构。 在Redis6以前是ziplist，到Redis7中改为了listpack。
+
