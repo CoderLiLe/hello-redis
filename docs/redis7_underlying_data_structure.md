@@ -279,3 +279,101 @@ OK
 &#x9;从这两个参数里可以看到，对于hash类型数据，大部分正常情况下，都是使用listpack。所以，对于hash类型数据，主要是要理解listpack是如何存储的。至于hashtable，正常基本用不上，面试也就很少会问。
 
 > 但是hash类型的底层数据，只用ziplist和listpack，其实是很像的。Redis6里也有ziplist相关的这两个参数。
+
+
+## 3.2 hash底层数据结构详解
+
+**首先理解hash数据底层数据存储的基础结构**
+
+&#x9;hash数据的value，是一系列的键值对。 这些 `<k,v>` 键值对底层封装成了一个 `dictEntry` 结构。然后，整个这些键值对，又会被封装成一个 `dict` 结构。这个dict结构就构成了hash的整个value。
+
+> 对于hashtable，早期版本中会有一个专门的数据结构dictht，现在就是这个dict了。
+
+dict.h 的84行：
+
+![](assets/redis7_underlying_data_structure/09.png)
+
+&#x9;dictEntry的结构体定义在dict.c中
+
+dict.c 的63行：
+
+![](assets/redis7_underlying_data_structure/10.png)
+
+**然后，来看redis底层是如何执行一个 `hset key field1 value1 field2 value2` 这样的指令的**
+
+&#x9;Redis底层处理hset指令的方法在 `t_hash.c` 的606行：
+
+![](assets/redis7_underlying_data_structure/11.png)
+
+&#x9;接下来这个 `hashTypeTryConversion` 方法就会尝试进行编码转换。 这就验证了hash类型数据根据那两个参数选择用listpack还是hashtable的。
+
+![](assets/redis7_underlying_data_structure/12.png)
+
+&#x9;**接下来，到底什么是listpack?**
+
+&#x9;listpack是ziplist的升级版，所以，谈到listpack就不得不谈ziplist。ziplist字面意义是压缩列表。怎么压缩呢？
+
+&#x9;ziplist最大的特点，就是他被设计成一种内存紧凑型的数据结构，占用一块连续的内存空间，不仅可以利用CPU缓存，而且会针对不同长度的数据，进行响应的编码。这种方法可以及有效的节省内存开销。
+
+&#x9;在redis6中，ziplist是Redis底层非常重要的一种数据结构，不止支持hash，还支持list等其他数据类型
+
+&#x9;ziplist是由连续内存块组成的顺序性数据结构，整个结构有点类似于数组。可以在任意一端进行push/pop操作，时间复杂度都是O(1)。整体结构如下：
+
+![](assets/redis7_underlying_data_structure/13.png)
+
+| 属性     | 类型       | 长度     | 用途                                                                 |
+|----------|------------|----------|----------------------------------------------------------------------|
+| zlbytes  | uint32_t   | 4 字节   | 记录整个压缩列表占用的内存字节数                                     |
+| zltail   | uint32_t   | 4 字节   | 记录压缩列表表尾节点距离压缩列表的起始地址有多少字节，通过这个偏移量，可以确定表尾节点的地址。 |
+| zllen    | uint16_t   | 2 字节   | 记录了压缩列表包含的节点数量。最大值为UINT16_MAX（65534），如果超过这个值，此处会记录为65535，但节点的真实数量需要遍历整个压缩列表才能计算得出。 |
+| entry    | 列表节点   | 不定     | 压缩列表包含的各个节点，节点的长度由节点保存的内容决定。             |
+| zlend    | uint8_t    | 1 字节   | 特殊值 0xFF（十进制 255），用于标记压缩列表的末端。                 |
+
+&#x9;这些entry就可以认为是保存hash类型的value当中的一个键值对。
+
+&#x9;然后，每一个entry结构又分为三个部分。
+
+![](assets/redis7_underlying_data_structure/14.png)
+
+*   `previous_entry_length` : 记录前一个节点的长度，占1个或者5个字节。如果前一个节点的长度小于254字节，则采用一个字节来保存长度值。如果前一个节点的长度大于等于254字节，则采用5个字节来保存这个长度值。第一个字节是0xfe，后面四个字节才是真实长度数据
+
+> 为什么要这样？因为255已经用在了ziplist的最后一个zlend。
+
+*   encoding：编码属性，记录content的数据类型。表明content是字符串还是整数，以及content的长度。
+*   contents：负责保存节点的数据，可以是字符串或整数。
+
+> ziplist后面的list通常是指链表数据结构。而典型的双向链表是在每个节点上通过两个指针指向前和后的相邻节点。而ziplist这种数据结构，就不再保存指针，只保留长度。极致压缩内存空间。这也是关于ziplist紧凑的一种表现。
+
+&#x9;在这种结构下，对于一个ziplist，要找到对列的第一个元素和最后一个元素，都是比较容易的，可以通过头部的三个字段直接找到。但是，如果想要找到中间某一些元素(比如Redis 的list数据类型的LRANGE指令)，那么就只能依次遍历(从前往后单向遍历)。所以，ziplist不太适合存储太多的元素。
+
+&#x9;**然后，为什么要用listpack替换ziplist呢？**
+
+&#x9;redis的作者antirez的github上提供了listpack的实现。里面有一个md文档介绍了listpack。文章地址： <https://github.com/antirez/listpack/blob/master/listpack.md>
+
+&#x9;listpack的整体结构跟ziplist是差不多的，只是做了一些小调整。最核心的原因是要解决ziplist的连锁更新问题。
+
+&#x9;下面介绍连锁更新问题，这个了解即可。
+
+&#x9;连锁更新问题的核心就是在enty的 `previous_entry_length` 记录方式。如果前一个节点的长度小于254字节，那么 `previous_entry_length` 只有1个字节。如果大于等于254字节，则 `previous_entry_length` 需要扩展到5个字节。
+
+&#x9;这时假设我们有这样一个ziplist，每个entry的长度都是在 250~253 字节之间，`previous_entry_length` 都只要一个字节。
+
+![](assets/redis7_underlying_data_structure/15.png)
+
+&#x9;这时，如果将一个长度大于等于254字节的新节点加入到压缩列表的表头节点，也就是e1的头部。
+
+![](assets/redis7_underlying_data_structure/16.png)
+
+&#x9;这时，因为e1的 `previous_entry_length` 只有1个字节，无法保存新节点的长度，此时就需要扩充 `previous_entry_length` 到5个字节。这样e1的整体长度就会超过254字节。而e1一旦长度扩展，意味着e2的 `previous_entry_length` 也需要从1扩展到5字节。接下来，后续每一个entry都需要重新调整空间。
+
+&#x9;这种特殊情况下产生的连续多次空间扩展操作，就称为连锁更新。连锁更新造成的空间连续变动，是非常不安全的，同时效率也是非常低的。正是因为连锁更新问题，才造成Redis7中使用新的listpack结构替代ziplists。
+
+&#x9;listpack的整体结构如下：	
+
+![](assets/redis7_underlying_data_structure/17.png)
+
+> 核心是entry中原本记录前一个entry的长度，现在改为记录自己的长度。这样，就不会再因为前一个entry变化而影响自己的长度。这样也就没有了连锁更新的问题。
+
+&#x9;listpack在源码中的体现如下（`listpack.h` 49行）：
+
+![](assets/redis7_underlying_data_structure/18.png)
