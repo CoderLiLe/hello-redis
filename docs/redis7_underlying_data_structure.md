@@ -96,4 +96,65 @@ struct redisObject {
 ```
 
 *   refcount：表示对象的引用次数。可以使用OBJECT REFCOUNT key 指令查看。
-*   \*ptr：这是一个指针，指向真正底层的数据结构。encoding只是一个类型描述。实际数据是保存在ptr指向的具体结构里。
+*   *ptr：这是一个指针，指向真正底层的数据结构。encoding只是一个类型描述。实际数据是保存在ptr指向的具体结构里。
+
+## 2、Redis常见数据类型的底层数据结构总结
+
+&#x9;我们已经知道了Redis有上层的应用类型，也有底层的数据结构。那么这些上层数据类型和底层数据结构是怎么对应的呢？
+
+```shell
+127.0.0.1:6379> set k1 v1
+OK
+127.0.0.1:6379> type k1
+string
+127.0.0.1:6379> object encoding k1
+"embstr"
+```
+
+&#x9;这就是一种对应关系。也就是说，在应用层面，我们操作的是string这样的数据类型，但是Redis在底层，操作的是embstr这样一种数据结构。但是，这些上层的数据类型和底层的数据结构之间，是不是就是简单的一一对应的关系呢？
+
+```shell
+127.0.0.1:6379> set k2 1
+OK
+127.0.0.1:6379> type k2
+string
+127.0.0.1:6379> object encoding k2
+"int"
+127.0.0.1:6379> set k3 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+OK
+127.0.0.1:6379> type k3
+string0
+127.0.0.1:6379> OBJECT ENCODING k3
+"raw"
+```
+
+&#x9;从这里能够看到，每一种上层数据类型对应底层多种不同的数据结构，也就是说，同样的一个数据类型，Redis底层的处理方式是不同的。
+
+> Redis提供了一个指令，可以直接调试某一个key的结构信息。但是这种方式默认是关闭的。
+>
+> ```shell
+> 127.0.0.1:6379> DEBUG Object k1
+> (error) ERR DEBUG command not allowed. If the enable-debug-command option is set to "local", you can run it from a local connection, otherwise you need to set this option in the configuration file, and then restart the server.
+> ```
+>
+> 按照要求，修改配置文件，重启Redis服务后，就可以看到每一个key的内部结构
+>
+> ```shell
+> 127.0.0.1:6379> DEBUG object k1
+> Value at:0x7f0e36264c80 refcount:1 encoding:embstr serializedlength:3 lru:7607589 lru_seconds_idle:23
+> ```
+
+&#x9;现在搞明白encoding是什么了之后，问题就到了下一步，这个ptr指针到底指向了哪些数据结构呢？
+
+&#x9;下面直接列出了Redis中上层数据类型和底层真正存储数据的数据结构的对应关系。
+
+| Redis版本 | string     | set                       | zset              | list               | hash              |
+| :------ | :--------- | :------------------------ | :---------------- | :----------------- | :---------------- |
+| Redis 6 | SDS(动态字符串) | intset+hashtable          | skiplist+ziplist  | quicklist+ziplist  | hashtable+ziplist |
+| Redis 7 | SDS        | intset+listpack+hashtable | skiplist+listpack | quicklist+listpack | hashtable+list    |
+
+&#x9;这个列表里的这些数据结构，如果不理解，先直接记住。 这是Redis一个比较高频的面试题(高级职位)。至于具体的细节，后面会慢慢分析。
+
+&#x9;另外，其他的数据类型，包括一些扩展模块的数据类型，面试中基本不太可能问得太深，自行理解。
+
+> &#x9;Redis6和Redis7最大的区别就在于Redis7已经用listpack替代了ziplist。只不过为了保证兼容性，Redis7中并没有移除ziplist的代码以及配置。listpack与ziplist的区别也是一个高频的面试题，后面会逐步介绍
