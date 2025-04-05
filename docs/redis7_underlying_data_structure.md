@@ -577,3 +577,29 @@ set-max-intset-entries 512
 set-max-listpack-entries 128
 set-max-listpack-value 64
 ```
+
+## 5.2 set底层数据结构详解
+
+&#x9;首先，关于set底层的intset，listpack，hashtable这三种数据类型，listpack之前已经介绍过。hashtable基本不太可能面试被问到。而intset，其实是一种比较简单的数据结构。就是保存一个整数。&#x20;
+
+`intset.h` 35行
+
+![](assets/redis7_underlying_data_structure/28.png)
+
+&#x9;然后，关于这三种数据结构之间如何转换，以set数据类型最为典型的sadd指令为例，会进入下面这个方法进行处理。
+
+`t_set.c` 605行
+
+![](assets/redis7_underlying_data_structure/29.png)
+
+&#x9;在创建set元素时，就会根据子元素的类型，判断是用intset还是用listpack。
+
+`t_set.c` 40行
+
+![](assets/redis7_underlying_data_structure/30.png)
+
+&#x9;而在添加元素时，也会根据参数判断是否需要转换底层编码
+
+`t_set.c` 59行
+
+![](assets/redis7_underlying_data_structure/31.png)
