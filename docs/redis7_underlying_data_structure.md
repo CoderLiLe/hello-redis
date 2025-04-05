@@ -679,3 +679,19 @@ zset-max-listpack-value 64
 ![](assets/redis7_underlying_data_structure/35.png)
 
 > createZsetObject方法在object.c当中。这个方法里可以看到对象结构被定义为SKIPLIST
+
+
+# 7. 总结
+
+Redis中几种常见数据结构的底层结构：
+
+| Redis版本 | string     | set                       | zset              | list               | hash              |
+| :------ | :--------- | :------------------------ | :---------------- | :----------------- | :---------------- |
+| Redis 6 | SDS(动态字符串) | intset+hashtable          | skiplist+ziplist  | quicklist+ziplist  | hashtable+ziplist |
+| Redis 7 | SDS        | intset+listpack+hashtable | skiplist+listpack | quicklist+listpack | hashtable+list    |
+
+&#x9;另外，关于Redis，有一个经久不衰的面试题，就是Redis为什么这么快。
+
+&#x9;这其实是一个没有标准答案的问题。Redis为了提升整体的运行速度，在各个方面都做了非常极致的优化。无锁化的线程模型，层层递进的集群架构，灵活定制的底层数据结构，极致优化的算法实现，等等，这些都是Redis对性能极致要求的体现。
+
+&#x9;但是，Redis的价值要求其实并不仅仅是一个快。在快的同时，Redis也在不断扩展新的业务功能，新的应用场景。集中式缓存、分布式锁、分布式主键生成、NoSQL数据库，向量搜索等各个方面的应用都是Redis不能忽视的价值
