@@ -378,7 +378,7 @@ dict.c 的63行：
 
 ![](assets/redis7_underlying_data_structure/18.png)
 
-## 3、hash底层数据结构总结
+## 3.3 hash底层数据结构总结
 
 &#x9;最后，对于hash类型的底层数据结构，做一个总结：
 
@@ -389,9 +389,9 @@ dict.c 的63行：
 3、对于同一个hash数据，listpack结构可以升级为hashtable结构，但是hashtable结构不会降级成为listpack。
 
 
-# 四、List类型数据结构详解
+# 4. List类型数据结构详解
 
-## 1、list数据是如何存储的
+## 4.1 list数据是如何存储的
 
 list类型的数据，在Redis中还是以 `listpack + quicklist`为基础保存的。
 
@@ -442,7 +442,7 @@ list-max-listpack-size -2
 > 这个结论跟redis的版本有关系。
 
 
-## 2、list底层数据结构详解
+## 4.2 list底层数据结构详解
 
 &#x9;先来对list的底层数据做源码验证：
 
