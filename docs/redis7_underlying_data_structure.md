@@ -98,6 +98,7 @@ struct redisObject {
 *   refcount：表示对象的引用次数。可以使用OBJECT REFCOUNT key 指令查看。
 *   *ptr：这是一个指针，指向真正底层的数据结构。encoding只是一个类型描述。实际数据是保存在ptr指向的具体结构里。
 
+
 ## 2、Redis常见数据类型的底层数据结构总结
 
 &#x9;我们已经知道了Redis有上层的应用类型，也有底层的数据结构。那么这些上层数据类型和底层数据结构是怎么对应的呢？
@@ -158,3 +159,39 @@ string0
 &#x9;另外，其他的数据类型，包括一些扩展模块的数据类型，面试中基本不太可能问得太深，自行理解。
 
 > &#x9;Redis6和Redis7最大的区别就在于Redis7已经用listpack替代了ziplist。只不过为了保证兼容性，Redis7中并没有移除ziplist的代码以及配置。listpack与ziplist的区别也是一个高频的面试题，后面会逐步介绍
+
+
+# 二、String数据结构详解
+
+&#x9;从之前的简单实验中已经看到，string数据，在底层对应了int ,embstr,raw三种不同的数据结构。他们到底是什么呢？下面分几个问题逐步深入。
+
+## 1、string数据是如何存储的？
+
+&#x9;**先上结论，再验证。** string数据的类型，会根据value的类型不同，有以下几种处理方式
+
+*   int :  如果value可以转换成一个long类型的数字，那么就用int保存value。只有整数才会使用int,如果是浮点数，Redis内部其实是先将浮点数转化成字符串，然后保存
+*   embstr ： 如果value是一个字符串类型，并且长度小于44字节的字符串，那么Redis就会用embstr保存。代表embstr的底层数据结构是SDS(Simple Dynamic String 简单动态字符串)
+*   raw ：如果value是一个字符串类型，并且长度大于44字节，就会用raw保存。
+
+&#x9;**源码验证：**
+
+&#x9;在客户端执行一个 `set k1 v1` 这样的指令，会进入 `t_string.c` 的 `setComand` 方法处理。
+
+t_string.c 的 295 行：
+
+![](assets/redis7_underlying_data_structure/01.png)
+
+&#x9;这个 tryObjectEncoding 的方法实现，在 object.c 中
+
+object.c 的 614行的 `tryObjectEncodingEx` 方法。 关键部分如下：
+
+![](assets/redis7_underlying_data_structure/02.png)
+
+> 1、从这里可以看到，对于数字长度超过20的大数字，Redis是不会用int保存的。
+>
+> 2、OBJ_SHARED_INTEGER = 1000 。对于1000以内的数字，直接指向内存。
+
+object.c 的 685行：
+
+![](assets/redis7_underlying_data_structure/03.png)
+
