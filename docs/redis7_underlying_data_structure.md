@@ -243,3 +243,39 @@ sds.h 的45行：
 &#x9;如果value是字符串且长度小于44字节，Redis底层就会使用embstr类型。embstr类型会调用内存分配函数，分配一块连续的内存空间保存对应的SDS。这样使用连续的内存空间，不光可以提高数据的读取速度，而且可以避免内存碎片。
 
 &#x9;如果value是字符串类型，但是大于44字节，那么RedisObject和SDS就会分开申请内存。通过RedisObject的ptr指针指向新创建的SDS。
+
+
+# 3. HASH类型数据结构详解
+
+## 3.1 hash数据是如何存储的
+
+&#x20;	还是先上结论，再源码验证。hash类型的数据，底层存储时，有两种存储格式：`hashtable` 和 `listpack`
+
+```shell
+127.0.0.1:6379> hset user:1 id 1 name roy 
+(integer) 2
+127.0.0.1:6379> type user:1
+hash
+127.0.0.1:6379> OBJECT ENCODING user:1
+"listpack"
+127.0.0.1:6379> config set hash-max-listpack-entries 3
+OK
+127.0.0.1:6379> config set hash-max-listpack-value 8
+OK
+127.0.0.1:6379> hset user:1 name royaaaaaaaaaaaaaaaa
+(integer) 0
+127.0.0.1:6379> OBJECT ENCODING user:1
+"hashtable"
+127.0.0.1:6379> hset user:2 id 1 name roy score 100 age 18
+(integer) 4
+127.0.0.1:6379> OBJECT ENCODING user:2
+"hashtable"
+```
+
+&#x9;简单来说，就是hash型的数据，如果value里的数据比较少，就用listpack。如果数据比较多，就用hashtable。
+
+&#x9;如何判断value里的数据少，涉及到两个参数。hash-max-listpack-entries 限制value里键值对的个数(默认512)，hash-max-listpack-value 限制value里值的数据大小(默认64字节)。
+
+&#x9;从这两个参数里可以看到，对于hash类型数据，大部分正常情况下，都是使用listpack。所以，对于hash类型数据，主要是要理解listpack是如何存储的。至于hashtable，正常基本用不上，面试也就很少会问。
+
+> 但是hash类型的底层数据，只用ziplist和listpack，其实是很像的。Redis6里也有ziplist相关的这两个参数。
