@@ -859,3 +859,25 @@ OK
 &#x9;gossip协议最大的好处在于，即使集群节点的数量增加，每个节点的负载也不会增加很多，几乎是恒定的。因此在Redis集群中，哪怕构建非常多的节点，也不会对服务性能造成很大的影响。但是gossip协议的数据同步是有延迟的，如果集群节点太多，数据同步的延迟时间也会增加。这对于Redis是不合适的。因此，通常不建议构建太大的Redis集群。
 
 &#x9;需要注意下的是，Redis集群中，每个节点都有一个专门用于节点之间进行gossip通信的端口，就是自己提供服务的端口+10000.因此，在部署Redis集群时，要注意防火墙配置，不要把这个端口屏蔽了。
+
+### 2、Redis集群选举流程
+
+当slave发现自己的master变为FAIL状态时，便尝试进行Failover，以期成为新的master。由于挂掉的master 可能会有多个slave，从而存在多个slave竞争成为master节点的过程， 其过程如下：&#x20;
+
+1. slave发现自己的master变为FAIL&#x20;
+
+2. 将自己记录的集群currentEpoch加1，并广播FAILOVER\_AUTH\_REQUEST信息(currentEpoch可以理解为选举周期，通过cluster info指令可以看到)
+
+3. 其他节点收到该信息，只有master响应，判断请求者的合法性，并发送FAILOVER\_AUTH\_ACK，对每一个 epoch只发送一次ack
+
+4. 尝试failover的slave收集master返回的FAILOVER\_AUTH\_ACK&#x20;
+
+5. slave收到 <font color=red>超过半数master的ack</font> 后变成新Master(这里解释了集群为什么至少需要三个主节点，如果只有两 个，当其中一个挂了，只剩一个主节点是不能选举成功的)&#x20;
+
+6. slave广播Pong消息通知其他集群节点
+
+从节点并不是在主节点一进入 FAIL 状态就马上尝试发起选举，而是有一定延迟，一定的延迟确保我们等待 FAIL状态在集群中传播，slave如果立即尝试选举，其它masters或许尚未意识到FAIL状态，可能会拒绝投票&#x20;
+
+延迟计算公式： `DELAY = 500ms + random(0 \~ 500ms) + SLAVE\_RANK \* 1000ms`;
+
+SLAVE\_RANK表示此slave已经从master复制数据的总量的rank。Rank越小代表已复制的数据越新。这种方 式下，持有最新数据的slave将会首先发起选举（理论上）。&#x20;
