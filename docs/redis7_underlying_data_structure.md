@@ -387,3 +387,56 @@ dict.c 的63行：
 2、如果hash对象保存的键值对超过512个，或者所有键值对的字符串长度超过64字节，底层的数据结构就会由listpack升级成为hashtable。
 
 3、对于同一个hash数据，listpack结构可以升级为hashtable结构，但是hashtable结构不会降级成为listpack。
+
+
+# 四、List类型数据结构详解
+
+## 1、list数据是如何存储的
+
+list类型的数据，在Redis中还是以 `listpack + quicklist`为基础保存的。
+
+```shell
+127.0.0.1:6379> lpush l1 a1
+(integer) 1
+127.0.0.1:6379> rpush l1 a2
+(integer) 2
+127.0.0.1:6379> type l1
+list
+127.0.0.1:6379> OBJECT ENCODING l1
+"listpack"
+```
+
+&#x9;这里看到，list类型的数据，通常是以listpack结构来保存的。但是，如果调整一下参数配置，就会有另外一种结果
+
+```shell
+127.0.0.1:6379> config set list-max-listpack-size 2
+OK
+127.0.0.1:6379> lpush l3 a1 a2 a3
+(integer) 3
+127.0.0.1:6379> OBJECT ENCODING l3
+"quicklist"
+```
+
+&#x9;关于list-max-listpack-size参数，在redis.conf文件中有更详细的描述。
+
+```conf
+# Lists are also encoded in a special way to save a lot of space.
+# The number of entries allowed per internal list node can be specified
+# as a fixed maximum size or a maximum number of elements.
+# For a fixed maximum size, use -5 through -1, meaning:
+# -5: max size: 64 Kb  <-- not recommended for normal workloads
+# -4: max size: 32 Kb  <-- not recommended
+# -3: max size: 16 Kb  <-- probably not recommended
+# -2: max size: 8 Kb   <-- good
+# -1: max size: 4 Kb   <-- good
+# Positive numbers mean store up to _exactly_ that number of elements
+# per list node.
+# The highest performing option is usually -2 (8 Kb size) or -1 (4 Kb size),
+# but if your use case is unique, adjust the settings as necessary.
+# -- 每个list中包含的节点大小或个数。正数表示个数，负数-1到-5表示大小。
+list-max-listpack-size -2
+```
+
+&#x9;所以，整体来说，对于list数据类型，Redis是根据value中数据的大小判断底层数据结构的。数据比较“小”的list类型，底层用listpack保存。数据量比较"大"的list类型，底层用quicklist保存。
+
+> 这个结论跟redis的版本有关系。
