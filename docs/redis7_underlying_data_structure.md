@@ -440,3 +440,51 @@ list-max-listpack-size -2
 &#x9;所以，整体来说，对于list数据类型，Redis是根据value中数据的大小判断底层数据结构的。数据比较“小”的list类型，底层用listpack保存。数据量比较"大"的list类型，底层用quicklist保存。
 
 > 这个结论跟redis的版本有关系。
+
+
+## 2、list底层数据结构详解
+
+&#x9;先来对list的底层数据做源码验证：
+
+&#x9;在处理lpush,rpush这些指令的时候，会进入下面的方法处理（`t_list.c` 484行）。
+
+![](assets/redis7_underlying_data_structure/19.png)
+
+&#x9;而这个 `createListListpackObject` 方法的声明，是在 `object.c` 文件中。这个方法就是创建一个listpack结构，来保存list中的元素。
+
+`object.c` 242行:
+
+![](assets/redis7_underlying_data_structure/20.png)
+
+&#x9;关键是接下来的listTypeTryConversionAppend方法，这个方法会尝试对listpack进行转换。
+
+`t_list.c` 132行:
+
+![](assets/redis7_underlying_data_structure/21.png)
+
+&#x9;然后，在这个listTypeTryConvertListpack方法中，终于看到了这个神奇的quicklist。
+
+`t_list.c` 32行:
+
+![](assets/redis7_underlying_data_structure/22.png)
+
+
+> 在这个方法中，涉及到服务端的另一个配置参数list-compress-depth 表示list的数据压缩级别。可以去配置文件中了解一下。
+>
+> ```conf
+> # Lists may also be compressed.
+> # Compress depth is the number of quicklist ziplist nodes from *each* side of
+> # the list to *exclude* from compression.  The head and tail of the list
+> # are always uncompressed for fast push/pop operations.  Settings are:
+> # 0: disable all list compression
+> # 1: depth 1 means "don't start compressing until after 1 node into the list,
+> #    going from either the head or tail"
+> #    So: [head]->node->node->...->node->[tail]
+> #    [head], [tail] will always be uncompressed; inner nodes will compress.
+> # 2: [head]->[next]->node->node->...->node->[prev]->[tail]
+> #    2 here means: don't compress head or head->next or tail->prev or tail,
+> #    but compress all nodes between them.
+> # 3: [head]->[next]->[next]->node->node->...->node->[prev]->[prev]->[tail]
+> # etc.
+> list-compress-depth 0
+> ```
