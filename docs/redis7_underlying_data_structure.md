@@ -527,3 +527,9 @@ list-max-listpack-size -2
 
 > quicklist的整体结构其实在Redis很早的版本中就已经成型了。区别在于quicklistNode中间保存的数据结构。 在Redis6以前是ziplist，到Redis7中改为了listpack。
 
+## 4.4 list底层数据结构总结
+
+&#x9;如果list的底层数据量比较小时，Redis底层用listpack结构保存。当list的底层数据量比较大时，Redis底层用quicklist结构保存。
+
+&#x9;至于这其中数据量大小的判断标准，由参数**list-max-listpack-size**决定。这个参数设置成正数，就是按照list结构的数据节点个数判断。负数从-1到-5，就是按照数据节点的大小判断。
+
