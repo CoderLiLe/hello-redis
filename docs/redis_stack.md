@@ -330,3 +330,51 @@ CF.RESERVE cf 1000 BUSKETSIZE 2 MAXITERATIONS 20 EXPANSION 1
 ```
 
 &#x9;其他使用，和布隆过滤器差不多。就是多了个CF.DEL删除元素的指令。
+
+
+# 四、Redis Stack补充
+
+## 1、手动安装Redis扩展模块
+
+&#x9;Redis Stack的这些扩展模块除了在Redis Cloud上直接使用外，也可以手动集成到自己的Redis服务当中。
+
+&#x9;登录Redis Cloud，进入下载中心，可以手动下载对应的扩展模块。下载时注意选择对应的Redis版本以及操作系统。
+
+![](assets/redis_stack/07.png)
+
+> 这是一个最简单的下载途径。另外更建议的方式，是去下载这些扩展模块的源码，然后编译，安装。
+
+&#x9;下载后获取以.so为后缀的扩展文件。上传到服务器后，在Redis的配置文件中加载这个扩展模块
+
+```conf
+# Load modules at startup. If the server is not able to load modules
+# it will abort. It is possible to use multiple loadmodule directives.
+#
+loadmodule /root/myredis/redisbloom.so
+```
+
+&#x9;然后重启Redis服务，就可以使用客户端，登录Redis后查看扩展模块的加载情况。
+
+```shell
+127.0.0.1:6379> MODULE LIST
+
+1.
+    1.  "name"
+    2.  "bf"
+    3.  "ver"
+    4.  (integer) 20612
+    5.  "path"
+    6.  "/root/myredis/redisbloom.so"
+    7.  "args"
+    8.  (empty array)
+
+```
+
+> 注意：如果模块加载错误，那么Redis服务启动会失败的。这时要去查看日志逐步排查问题。
+>
+> 例如，如果redisbloom.so文件在Linux服务器上，没有添加可执行的x 权限，那么Redis就会启动失败
+>
+> ```log
+> 27425:M 18 Jun 2024 14:07:29.670 # Module /root/myredis/redisbloom.so failed to load: It does not have execute permissions.
+> 27425:M 18 Jun 2024 14:07:29.670 # Can't load module from /root/myredis/redisbloom.so: server aborting
+> ```
