@@ -195,3 +195,40 @@ object.c 的 685行：
 
 ![](assets/redis7_underlying_data_structure/03.png)
 
+## 2、string类型对应的 int, embstr, raw 有什么区别？
+
+### 2.1 int类型
+
+&#x9;就是尽量在对应的robj中的ptr指向一个缓存数据对象。
+
+![](assets/redis7_underlying_data_structure/04.png)
+
+### 2.2 embstr类型
+
+&#x9;如果字符串类型长度小于44，就会创建一个embstr的对象。这个创建的方法是这样的：
+
+object.c 的92行：
+
+![](assets/redis7_underlying_data_structure/05.png)
+
+&#x9;embstr字面意思就是内嵌字符串。 所谓内嵌的核心，其实就是将新创建的SDS对象直接分配在对象自己的内存后面。这样内存读取效率明显更高。
+
+> 这里有一段介绍， SDS其实是一段不可修改的字符串。这意味着如果使用APPEND之类的指令尝试修改一个key的值，那么就算value的长度没有超过44,Redis也会使用一个新创建的raw类型，而不再使用原来的SDS。&#x20;
+
+![](assets/redis7_underlying_data_structure/06.png)
+
+&#x9;这个SDS是什么呢？其实他就是Redis底层对于String的一种封装。
+
+sds.h 的45行：
+
+![](assets/redis7_underlying_data_structure/07.png)
+
+&#x9;Redis根据字符串长度不同，封装了多种不同的SDS结构。通常，保存字符串，用一个buf\[]就够了。但是Redis在这个数组的基础上，封装成了SDS结构。通过添加的这些参数，可以更方便解析字符串。
+
+&#x9;例如，如果用数组方式保存字符串，那么读取完整字符串就只能遍历数组里的各个字节数据，时间复杂度O(N)。但是SDS中预先记录了len后，就可以直接读取一定长度的字节，时间复杂度O(1)，效率更高。 另外，C语言中通常用字节数组保存字符串，那么还需要定义一个特殊的结束符\0表示这一个字符串结束。但是在Redis中，如果value中就包含\0这样的字符串，就会产生歧义。但是有SDS后，直接读取完整字节，也就不用管这些歧义了。
+
+### 2.3 raw类型
+
+&#x9;从之前分析可以看到，raw类型其实相当于是兜底的一种类型。特殊的数字类型和小字符串类型处理完了后，就是raw类型了。raw类型的处理方式就是单独创建一个SDS，然后将robj的ptr指向这个SDS。
+
+![](assets/redis7_underlying_data_structure/08.png)
