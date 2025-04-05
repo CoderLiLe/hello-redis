@@ -881,3 +881,42 @@ OK
 延迟计算公式： `DELAY = 500ms + random(0 \~ 500ms) + SLAVE\_RANK \* 1000ms`;
 
 SLAVE\_RANK表示此slave已经从master复制数据的总量的rank。Rank越小代表已复制的数据越新。这种方 式下，持有最新数据的slave将会首先发起选举（理论上）。&#x20;
+
+
+## 5、Redis集群能不能保证数据安全？
+
+&#x9;**首先，在Redis集群相对比较稳定的时候，Redis集群是能够保证数据安全的。**
+
+&#x9;   因为Redis集群中每个master都是可以配置slave从节点的。这些slave节点会即时备份master的数据。在master宕机时，slave会自动切换成master。继续提供服务。
+
+&#x9;   在Redis的配置文件中，有两个参数用来保证每个master必须有健康的slave进行备份。
+
+```conf
+# It is possible for a master to stop accepting writes if there are less than
+# N replicas connected, having a lag less or equal than M seconds.
+#
+# The N replicas need to be in "online" state.
+#
+# The lag in seconds, that must be <= the specified value, is calculated from
+# the last ping received from the replica, that is usually sent every second.
+#
+# This option does not GUARANTEE that N replicas will accept the write, but
+# will limit the window of exposure for lost writes in case not enough replicas
+# are available, to the specified number of seconds.
+#
+# For example to require at least 3 replicas with a lag <= 10 seconds use:
+#
+# min-replicas-to-write 3
+# min-replicas-max-lag 10
+#
+# Setting one or the other to 0 disables the feature.
+#
+# By default min-replicas-to-write is set to 0 (feature disabled) and
+# min-replicas-max-lag is set to 10
+```
+
+&#x9;**然后，由于Redis集群的gossip协议在同步元数据时不保证强一致性，这意味着在特定的条件下，Redis集群可能会丢掉一些被系统收到的写入请求命令。**
+
+&#x9;这些特定条件通常都比较苛刻，概率比较小。比如网络抖动产生的脑裂问题。
+
+&#x9;在企业中，有良好运维支持，通常可以认为Redis集群的数据是安全的。
