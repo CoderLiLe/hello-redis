@@ -239,3 +239,34 @@ FT.SEARCH productIndex "@name:HUAWEI @price:[1000 5000]" RETURN 2 id name
 ![](assets/redis_stack/06.png)
 
 &#x9;布隆过滤器判断一个元素不在集合中，那么这个元素肯定不在集合中。但是，布隆过滤器判断一个元素在集合中，那么这个元素有可能不在集合中。
+
+
+### 2、Guava的布隆过滤器示例
+
+&#x9;布隆过滤器中，将一个原本不在集合中的元素判断成为在集合中，这就是误判。而误判率是布隆过滤器一个很重要的控制指标。
+
+&#x9;在算法实现时，误判率是可以通过设定更复杂的哈希函数组合以及做更大的位数组来进行控制的。所以，在布隆过滤器的初始化过程中，通常只需要指定过滤器的容量和误判率，就足够了。
+
+&#x9;pom.xml引入Guava
+
+```xml
+<dependency>
+  <groupId>com.google.guava</groupId>
+  <artifactId>guava</artifactId>
+  <version>33.1.0-jre</version>
+</dependency>
+```
+
+&#x9;使用Guava提供的布隆过滤器实现
+
+```java
+public static void main(String[] args) {
+    BloomFilter<String> bloomFilter = BloomFilter.create(Funnels.stringFunStandardCharsets.UTF_8),10000,0.0
+    //把 A~Z 放入布隆过滤器
+    for (int i = 64; i <= 90 ; i++) {
+       bloomFilter.put(String.valueOf((char) i));
+    }
+    System.out.println(bloomFilter.mightContain("A")); //true
+    System.out.println(bloomFilter.mightContain("a")); //false
+}
+```
