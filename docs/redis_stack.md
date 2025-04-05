@@ -303,3 +303,30 @@ BF.SCANDUMP bf 0
 ## 和SCAN指令使用很像，返回当前访问到的数据和下一次迭代的起点。 当下次迭代起点为0表示数据已经全部迭代完成。
 ## 主要是可以配合BF.LOADCHUNK 进行备份。
 ```
+
+## 5、Cuckoo Filter
+
+### 1、CuckooFilter是什么？
+
+&#x9;布隆过滤器最大的问题是无法删除数据。因此，后续诞生了很多布隆过滤器的改进版本。Cuckoo Filter 布谷鸟过滤器就是其中一种。
+
+&#x9;相比于布隆过滤器，Cuckoo Filter可以删除数据。而且基于相同的集合和误报率，Cuckoo Filter通常占用空间更少。相对的，算法实现也就更复杂。
+
+&#x9;不过他同样有误判率。即有可能将一个不在集合中的元素错误的判断成在集合中。布隆过滤器的误报率通过调整位数组的大小和哈希函数来控制，而CuckooFilter的误报率受指纹大小和桶大小控制。
+
+> BUSKETSIZE，表示每个桶Busket中存放的元素个数。Cuckoo Filter的数组里存的不是位，而是桶busket，每个桶里可以存放多个数据。同一个桶中存放的数据越多，空间利用率更高，相应的误判率也就越高，性能也更慢。Redis的CuckooFilter实现中，BUSKETSIZE应该是一个在1到255之间的整数，默认的BUSKETSIZE是2。
+>
+> 桶Busket中并不实际保存数据本身，而是保存数据的指纹(可以认为是压缩后的数据，实际上是数据对象的几个低位数据)。指纹越小，HASH冲突造成误判的几率就越小。这个参数的调整比较复杂，Redis的CuckooFilter中不支持调整这个参数。
+
+### 2、CuckooFilter使用示例
+
+```shell
+-- 创建默认值
+## 容量1000，这个是必填参数。后面几个都是可选参数。这里填的几个就是Redis中的CuckooFilter的默认值
+## BUSKETSIZE越大，空间利用率更高，但是误判率也更高，性能更差
+## MAXITARATIONS越小，性能越好。如果设置越大，空间利用率就越好。
+## EXPANSION 是指空间扩容的比例。
+CF.RESERVE cf 1000 BUSKETSIZE 2 MAXITERATIONS 20 EXPANSION 1
+```
+
+&#x9;其他使用，和布隆过滤器差不多。就是多了个CF.DEL删除元素的指令。
