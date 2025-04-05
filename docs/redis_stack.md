@@ -270,3 +270,36 @@ public static void main(String[] args) {
     System.out.println(bloomFilter.mightContain("a")); //false
 }
 ```
+
+
+### 3、Redis的BloomFilter使用示例
+
+&#x9;布隆过滤器是用的二进制数组来保存数据，所以，Redis的BitMap数据结构天生就非常适合做一个分布式的布隆过滤器底层存储。只是算法还是需要自己实现。有很多企业实际上也是这么做的。
+
+&#x9;现在Redis提供了BloomFilter模块后，BloomFilter的使用门槛就更低了。
+
+```shell
+-- 创建一个key为bf的布隆过滤器，容错率0.01，容量1000。NONSCALING 表示不扩容。如果这个过滤器里的数据满了，就直接报错
+BF.RESERVE bf 0.01 1000 NONSCALING
+-- 添加元素
+BF.ADD bf A
+.....
+-- 批量添加元素
+BF.MADD bf B C D E F G H I
+
+-- 如果bf不存在，就创建一个key为bf的过滤器。
+BF.INSERT bf CAPACITY 1000 ERROR 0.01 ITEMS hello
+-- 查看容量
+BF.CARD bf
+-- 判断元素是否在过滤器中
+## 返回值0表示不在，1表示在
+BF.EXISTS bf a
+-- 批量判断
+BF.MEXISTS bf A a B b
+-- 查看布隆过滤器状态
+BF.INFO bf
+# 依次迭代布隆过滤器中的位数组
+BF.SCANDUMP bf 0
+## 和SCAN指令使用很像，返回当前访问到的数据和下一次迭代的起点。 当下次迭代起点为0表示数据已经全部迭代完成。
+## 主要是可以配合BF.LOADCHUNK 进行备份。
+```
