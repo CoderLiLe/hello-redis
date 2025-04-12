@@ -97,21 +97,13 @@ docker network connect heima mysql
 ```
 
 
-
-
-
 ## 2.3.安装Canal
 
-课前资料中提供了canal的镜像压缩包:
-
-![image-20210813161804292](assets/image-20210813161804292.png) 
-
-大家可以上传到虚拟机，然后通过命令导入：
+将canal的镜像压缩包上传到虚拟机，然后通过命令导入：
 
 ```
 docker load -i canal.tar
 ```
-
 
 
 然后运行命令创建Canal容器：
