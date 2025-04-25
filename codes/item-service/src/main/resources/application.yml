@@ -9,7 +9,7 @@ spring:
     password: 123
     driver-class-name: com.mysql.jdbc.Driver
 mybatis-plus:
-  type-aliases-package: com.heima.item.pojo
+  type-aliases-package: com.redis.item.pojo
   configuration:
     map-underscore-to-camel-case: true
   global-config:
@@ -18,6 +18,6 @@ mybatis-plus:
       id-type: auto
 logging:
   level:
-    com.heima: debug
+    com.redis: debug
   pattern:
     dateformat: HH:mm:ss:SSS

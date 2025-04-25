@@ -273,7 +273,7 @@
      */
     function genStaticKeys (modules) {
         return modules.reduce(function (keys, m) {
-            return keys.concat(m.staticKeys || [])
+            return keys.concat(m.staticKeys ||[])
         }, []).join(',')
     }
 
@@ -2575,7 +2575,7 @@
                 var name = data.slot;
                 var slot = (slots[name] || (slots[name] = []));
                 if (child.tag === 'template') {
-                    slot.push.apply(slot, child.children || []);
+                    slot.push.apply(slot, child.children ||[]);
                 } else {
                     slot.push(child);
                 }
@@ -2842,7 +2842,7 @@
         if (propsData && vm.$options.props) {
             toggleObserving(false);
             var props = vm._props;
-            var propKeys = vm.$options._propKeys || [];
+            var propKeys = vm.$options._propKeys ||[];
             for (var i = 0; i < propKeys.length; i++) {
                 var key = propKeys[i];
                 var propOptions = vm.$options.props; // wtf flow?
@@ -4056,7 +4056,7 @@
         if (vnode instanceof VNode) {
             return cloneAndMarkFunctionalResult(vnode, data, renderContext.parent, options)
         } else if (Array.isArray(vnode)) {
-            var vnodes = normalizeChildren(vnode) || [];
+            var vnodes = normalizeChildren(vnode) ||[];
             var res = new Array(vnodes.length);
             for (var i = 0; i < vnodes.length; i++) {
                 res[i] = cloneAndMarkFunctionalResult(vnodes[i], data, renderContext.parent, options);
@@ -7025,14 +7025,14 @@
         if (isDef(on[RANGE_TOKEN])) {
             // IE input[type=range] only supports `change` event
             var event = isIE ? 'change' : 'input';
-            on[event] = [].concat(on[RANGE_TOKEN], on[event] || []);
+            on[event] = [].concat(on[RANGE_TOKEN], on[event] ||[]);
             delete on[RANGE_TOKEN];
         }
         // This was originally intended to fix #4521 but no longer necessary
         // after 2.5. Keeping it for backwards compat with generated code from < 2.4
         /* istanbul ignore if */
         if (isDef(on[CHECKBOX_RADIO_TOKEN])) {
-            on.change = [].concat(on[CHECKBOX_RADIO_TOKEN], on.change || []);
+            on.change = [].concat(on[CHECKBOX_RADIO_TOKEN], on.change ||[]);
             delete on[CHECKBOX_RADIO_TOKEN];
         }
     }
@@ -8355,7 +8355,7 @@
             var tag = this.tag || this.$vnode.data.tag || 'span';
             var map = Object.create(null);
             var prevChildren = this.prevChildren = this.children;
-            var rawChildren = this.$slots.default || [];
+            var rawChildren = this.$slots.default ||[];
             var children = this.children = [];
             var transitionData = extractTransitionData(this);
 
@@ -10776,7 +10776,7 @@
                     // merge custom modules
                     if (options.modules) {
                         finalOptions.modules =
-                            (baseOptions.modules || []).concat(options.modules);
+                            (baseOptions.modules ||[]).concat(options.modules);
                     }
                     // merge custom directives
                     if (options.directives) {
