@@ -1,4 +1,4 @@
-# Redis集群
+# 12-Redis集群
 
 本章是基于CentOS7下的Redis集群教程，包括：
 
